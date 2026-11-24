@@ -8,6 +8,7 @@ import {
   Animated,
   Platform,
   ScrollView,
+  type ScrollViewInstance,
   Keyboard,
   TouchableWithoutFeedback,
   Image,
@@ -31,7 +32,7 @@ import axios from 'axios';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Modal, ActivityIndicator, FlatList, Dimensions, StatusBar, Keyboard, TouchableWithoutFeedback, Animated, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Modal, ActivityIndicator, FlatList, Dimensions, StatusBar, Keyboard, TouchableWithoutFeedback, Animated, Platform, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -112,7 +112,7 @@ const ivStyles = StyleSheet.create({
 export default function ReportDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
 
   // Keyboard offset animation
   const keyboardOffset = useRef(new Animated.Value(0)).current;

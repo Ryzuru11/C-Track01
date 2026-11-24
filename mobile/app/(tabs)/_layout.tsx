@@ -142,7 +142,7 @@ export default function TabLayout() {
         options={{
           title: 'Beranda',
           tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={22} name={focused ? 'house.fill' : 'house'} color={color} />
+            <IconSymbol size={22} name={focused ? 'house.fill' : 'house'} color={typeof color === 'string' ? color : '#000000'} />
           ),
         }}
       />
@@ -151,7 +151,7 @@ export default function TabLayout() {
         options={{
           title: 'Laporan',
           tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={22} name={focused ? 'doc.text.fill' : 'doc.text'} color={color} />
+            <IconSymbol size={22} name={focused ? 'doc.text.fill' : 'doc.text'} color={typeof color === 'string' ? color : '#000000'} />
           ),
         }}
       />
@@ -160,7 +160,7 @@ export default function TabLayout() {
         options={{
           title: 'Peta',
           tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={22} name={focused ? 'map.fill' : 'map'} color={color} />
+            <IconSymbol size={22} name={focused ? 'map.fill' : 'map'} color={typeof color === 'string' ? color : '#000000'} />
           ),
         }}
       />
@@ -170,7 +170,7 @@ export default function TabLayout() {
           title: 'Notifikasi',
           tabBarIcon: ({ color, focused }) => (
             <View>
-              <IconSymbol size={22} name={focused ? 'bell.fill' : 'bell'} color={color} />
+              <IconSymbol size={22} name={focused ? 'bell.fill' : 'bell'} color={typeof color === 'string' ? color : '#000000'} />
               {hasUnread && (
                 <View
                   style={{
@@ -193,7 +193,7 @@ export default function TabLayout() {
         options={{
           title: 'Profil',
           tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={22} name={focused ? 'person.fill' : 'person'} color={color} />
+            <IconSymbol size={22} name={focused ? 'person.fill' : 'person'} color={typeof color === 'string' ? color : '#000000'} />
           ),
         }}
       />

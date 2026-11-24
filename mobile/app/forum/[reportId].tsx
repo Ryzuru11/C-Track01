@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
+  type ScrollViewInstance,
   StyleSheet, Image, Alert, Modal, Dimensions, FlatList, StatusBar,
   Platform, Keyboard,
 } from "react-native";
@@ -240,7 +241,7 @@ export default function ForumScreen() {
 
   const socketRef = useRef<any>(null);
   const typingTimer = useRef<any>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
   const commentRefs = useRef<Record<string, any>>({});
   const justSentRef = useRef(false);
   const initialScrollDoneRef = useRef(false);

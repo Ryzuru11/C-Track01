@@ -71,7 +71,7 @@ const PencapaianScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Custom Header - Sama seperti task-detail */}
       <View style={styles.header}>

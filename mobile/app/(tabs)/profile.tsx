@@ -14,6 +14,7 @@ import {
   Keyboard,
   Animated,
   KeyboardAvoidingView,
+  type ScrollViewInstance,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -76,7 +77,7 @@ export default function ProfileScreen() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
 
   // ── Keyboard Listeners ──────────────────────────────────────
   useEffect(() => {
@@ -614,7 +615,9 @@ export default function ProfileScreen() {
       visible={avatarModalVisible}
       transparent
       animationType="slide"
-      onRequestClose={() => !isUploadingAvatar && setAvatarModalVisible(false)}
+      onRequestClose={() => {
+        if (!isUploadingAvatar) setAvatarModalVisible(false);
+      }}
     >
       <View style={styles.avatarModalOverlay}>
         <SafeAreaView style={styles.avatarModalSafeArea}>

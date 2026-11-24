@@ -143,7 +143,7 @@ const TrackingMap: React.FC<TrackingMapProps> = ({
     containerStyle,
     mapWrapperStyle,
 }) => {
-    const webViewRef = useRef<WebView>(null);
+    const webViewRef = useRef<WebView<{}>>(null);
     const isMountedRef = useRef(false);
     const locationSubRef = useRef<Location.LocationSubscription | null>(null);
     const routeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -310,7 +310,7 @@ const TrackingMap: React.FC<TrackingMapProps> = ({
     return (
         <View style={[styles.container, containerStyle]}>
             <View style={[styles.mapWrapper, mapWrapperStyle]}>
-                <WebView
+                <WebView<{}>
                     ref={webViewRef}
                     source={webViewSource}
                     style={styles.map}

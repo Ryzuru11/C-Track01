@@ -32,7 +32,13 @@ export default function TaskDetailScreen() {
     setIsStarting(true);
     try {
       // Bersihkan ID dari spasi tersembunyi
-      const cleanId = typeof id === 'string' ? id.trim() : id[0].trim();
+      const taskId = Array.isArray(id) ? id[0] : id;
+      const cleanId = taskId?.trim();
+      if (!cleanId) {
+        Alert.alert("Gagal", "ID tugas tidak ditemukan.");
+        setIsStarting(false);
+        return;
+      }
 
       // ✅ AMBIL TOKEN DINAMIS DARI STORAGE
       const token = await AsyncStorage.getItem('userToken');
