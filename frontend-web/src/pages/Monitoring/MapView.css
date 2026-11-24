@@ -1,0 +1,264 @@
+.map-view {
+  flex: 1;
+  position: relative;
+  overflow: visible;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Leaflet Map Container */
+.leaflet-map {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  border-radius: 8px;
+}
+
+.leaflet-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  border-radius: 8px;
+}
+
+/* Override Leaflet zoom controls to match app theme */
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  margin: 12px !important;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  color: #1d1d1f !important;
+  background-color: #ffffff !important;
+  border: none !important;
+  border-bottom: 1px solid #e5e5ea !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.15s ease !important;
+}
+
+.leaflet-control-zoom-out {
+  border-bottom: none !important;
+}
+
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover {
+  background-color: #f5f5f7 !important;
+  color: #000000 !important;
+}
+
+/* Map placeholder when no members */
+.map-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #f5f5f7 0%, #ffffff 50%, #f5f5f7 100%);
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-info {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #86868b;
+  pointer-events: none;
+}
+
+.map-info p {
+  font-size: 24px;
+  font-weight: 600;
+  color: #d2d2d7;
+  margin: 0 0 8px 0;
+}
+
+.map-info span {
+  font-size: 14px;
+  color: #86868b;
+}
+
+.map-info-small {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1d1d1f;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e5ea;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Custom Avatar Marker Styles */
+.custom-avatar-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.avatar-marker-container {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  border: 4px solid #10b981;
+  background: white;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.avatar-marker-container:hover {
+  transform: scale(1.15);
+  z-index: 1000;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.marker-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.marker-avatar-initials {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+}
+
+/* Leaflet Popup Customization */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e5ea;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  min-width: 200px;
+}
+
+.marker-popup {
+  padding: 12px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e5ea;
+}
+
+.popup-header-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.marker-popup h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+/* Legacy styles for backward compatibility */
+.marker-popup > h3 {
+  margin: 0 0 12px 0;
+  border-bottom: 1px solid #e5e5ea;
+  padding-bottom: 8px;
+}
+
+.popup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 13px;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #1d1d1f;
+  text-align: left;
+}
+
+.info-value {
+  color: #1d1d1f;
+  word-break: break-word;
+}
+
+.info-value.coordinates {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #86868b;
+}
+
+.leaflet-popup-tip {
+  border: 1px solid #e5e5ea;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .map-legend {
+    bottom: 10px;
+    left: 10px;
+    padding: 12px;
+  }
+
+  .map-info-small {
+    top: 10px;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .marker-popup h3 {
+    font-size: 14px;
+  }
+
+  .popup-info p {
+    font-size: 12px;
+  }
+}

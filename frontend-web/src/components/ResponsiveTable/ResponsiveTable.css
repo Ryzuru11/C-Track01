@@ -1,0 +1,83 @@
+/* ══════════════════════════════════════════════════════
+   ResponsiveTable  –  shared responsive table wrapper
+   Used by: Task, Taken, UserManagement pages
+   ══════════════════════════════════════════════════════ */
+
+/* ── Scroll container ─────────────────────────────────── */
+.rt-wrapper {
+  width: 100%;
+  overflow-x: auto;   /* horizontal scroll when columns overflow viewport */
+  overflow-y: auto;   /* vertical scroll with dynamic max-height */
+  position: relative;
+  /* min-height keeps the wrapper from collapsing when empty */
+  min-height: 200px;
+}
+
+/* Tighten the height on short viewports so the page doesn't feel cramped */
+@media (max-height: 700px) {
+  .rt-wrapper { max-height: calc(100vh - 220px) !important; }
+}
+
+/* On narrow screens reduce the subtracted offset because headers are smaller */
+@media (max-width: 768px) {
+  .rt-wrapper { max-height: calc(100vh - 210px) !important; }
+}
+
+/* ── Table base ───────────────────────────────────────── */
+.rt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  table-layout: auto;
+}
+
+/* ── Loading state ────────────────────────────────────── */
+.rt-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: #86868b;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.rt-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e5ea;
+  border-top-color: #007aff;
+  border-radius: 50%;
+  animation: rt-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Custom scrollbar (webkit) ────────────────────────── */
+.rt-wrapper::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.rt-wrapper::-webkit-scrollbar-track {
+  background: #f5f5f7;
+  border-radius: 3px;
+}
+
+.rt-wrapper::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border-radius: 3px;
+}
+
+.rt-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #aeaeb2;
+}
+
+.rt-wrapper::-webkit-scrollbar-corner {
+  background: #f5f5f7;
+}

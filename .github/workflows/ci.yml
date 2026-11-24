@@ -1,0 +1,308 @@
+name: C-Track CI/CD
+
+on:
+  push:
+    branches: [main, master, develop, testing]
+  pull_request:
+    branches: [main, master, develop, testing]
+  workflow_dispatch:
+
+# Repo monorepo: backend-express / frontend-web / mobile
+# Runner self-hosted di VPS: build dan test di _work runner
+# POLA B untuk deploy: build di _work -> rsync ke /var/www/C-Track (live)
+# Tiap job hanya jalan kalau folder-nya berubah (path filter git diff).
+
+concurrency:
+  group: ctrack-${{ github.ref }}
+  cancel-in-progress: false
+
+# Dipakai oleh semua step "Skip kalau ... gak berubah".
+# Push: bandingkan dengan isi branch sebelum push (semua commit yang di-push ikut dicek).
+# PR / push pertama / force push: fallback ke HEAD~1 (merge commit PR -> base branch).
+env:
+  EVENT_NAME: ${{ github.event_name }}
+  BEFORE_SHA: ${{ github.event.before }}
+
+jobs:
+  # ============ BACKEND ============
+  backend:
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/backend-express
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau backend gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || git diff --name-only "$BASE" HEAD 2>/dev/null | grep -q "^backend-express/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + Prisma + Build + Test (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          npm install --legacy-peer-deps
+          npx prisma generate
+          npm run build
+          npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-jwt-secret-key-for-ci
+
+  # ============ FRONTEND ============
+  frontend:
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/frontend-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau frontend gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || git diff --name-only "$BASE" HEAD 2>/dev/null | grep -q "^frontend-web/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + Unit & Component Test + Build (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          npm install --legacy-peer-deps
+          npm test
+          npm run build
+
+      - name: Playwright E2E Test (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          sudo apt-get update --allow-releaseinfo-change -y || true
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+  # ============ MOBILE ============
+  mobile:
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau mobile gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || git diff --name-only "$BASE" HEAD 2>/dev/null | grep -q "^mobile/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + Test (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          npm install --legacy-peer-deps
+          npm test
+
+  # ################ DEPLOY (hanya push ke main, setelah semua test lolos) ################
+
+  # ============ DEPLOY BACKEND ============
+  deploy-backend:
+    needs: [backend, frontend, mobile]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/backend-express
+      DST: /var/www/C-Track/backend-express
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau backend gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if git diff --name-only "$BASE" HEAD | grep -q "^backend-express/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + Prisma + Build (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          npm install --legacy-peer-deps
+          npx prisma generate
+          npm run build
+
+      # uploads/ berisi foto laporan yang hanya ada di server (di-ignore git),
+      # jadi WAJIB di-exclude supaya --delete tidak menghapusnya.
+      - name: Rsync ke live (exclude .env / .git / uploads / node_modules)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          sudo rsync -az --delete \
+            --exclude='.env' --exclude='.git' --exclude='nohup.out' \
+            --exclude='uploads/' --exclude='node_modules/' \
+            "$SRC/" "$DST/"
+          cd "$DST"
+          npm install --legacy-peer-deps
+          npx prisma generate
+
+      # Kalau migrasi gagal, job berhenti di sini dan pm2 TIDAK di-restart
+      # (proses lama tetap jalan dengan kode lama di memori).
+      - name: Migrasi database + sync RBAC
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$DST"
+          npx prisma migrate deploy
+          npm run rbac:sync
+
+      - name: Restart pm2
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$DST"
+          pm2 restart ecosystem.config.js --update-env || pm2 start ecosystem.config.js
+          pm2 status
+
+      - name: Health check
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          URL="https://ctrack.gogo.web.id/api/health"
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || true)
+            echo "API /api/health: $CODE (percobaan $i)"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 3
+          done
+          echo "Health check backend gagal" && exit 1
+
+  # ============ DEPLOY FRONTEND ============
+  # Menunggu deploy-backend: frontend baru butuh respons API dari backend baru.
+  deploy-frontend:
+    needs: [backend, frontend, mobile, deploy-backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/frontend-web
+      DST: /var/www/C-Track/frontend-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau frontend gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if git diff --name-only "$BASE" HEAD | grep -q "^frontend-web/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # .env production (VITE_API_BASE_URL, VITE_SOCKET_URL) dibaca saat build.
+      # Tanpa ini build jatuh ke URL http:// cadangan yang diblokir browser di situs https.
+      - name: Install + Build (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          if [ -f "$DST/.env" ]; then
+            cp "$DST/.env" "$SRC/.env"
+          else
+            echo "::warning::$DST/.env tidak ditemukan, build memakai URL API cadangan"
+          fi
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Rsync ke live (exclude node_modules / .env / .git)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          sudo rsync -az --delete \
+            --exclude='node_modules' --exclude='.env' --exclude='.git' \
+            "$SRC/" "$DST/"
+          sudo nginx -t && sudo systemctl reload nginx
+
+      - name: Health check
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          URL="https://ctrack.gogo.web.id/"
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || true)
+            echo "FE /: $CODE (percobaan $i)"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 2
+          done
+          echo "Health check frontend gagal" && exit 1
+
+  # ============ DEPLOY MOBILE ============
+  deploy-mobile:
+    needs: [backend, frontend, mobile]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    env:
+      SRC: ${{ github.workspace }}/mobile
+      DST: /var/www/C-Track/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip kalau mobile gak berubah
+        id: changed
+        run: |
+          BASE="HEAD~1"
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then BASE="$BEFORE_SHA"; fi
+          if git diff --name-only "$BASE" HEAD | grep -q "^mobile/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install deps (di _work)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          cd "$SRC"
+          npm install --legacy-peer-deps
+
+      - name: Rsync ke live (exclude node_modules / .expo / .git)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          sudo rsync -az --delete \
+            --exclude='node_modules' --exclude='.expo' --exclude='.git' \
+            "$SRC/" "$DST/"
+          cd "$DST"
+          npm install --legacy-peer-deps
+          sudo systemctl restart expo-mobile.service
+
+      - name: Status expo
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          systemctl status expo-mobile.service --no-pager | head -6

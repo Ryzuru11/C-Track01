@@ -1,0 +1,824 @@
+openapi: 3.0.0
+info:
+  title: C-Track Professional API
+  description: |
+    **Dokumentasi API Lengkap C-Track (PBL)**
+    Mencakup fitur Authentication, Task Management, Live Tracking (Locations), Reporting, Geocoding, Chat, Notifications, AI Copilot, Leaderboard, dan Achievement.
+  version: 1.0.0
+
+servers:
+  - url: http://202.169.232.241:8017/api
+    description: Production Server
+  - url: http://localhost:8000/api
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # ==========================================
+  # SCHEMAS (STANDAR INDUSTRI)
+  # ==========================================
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: "Terjadi kesalahan pada request" }
+        
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid, example: "notif-1234-uuid" }
+        userId: { type: string, format: uuid }
+        title: { type: string, example: "Tugas Baru Masuk!" }
+        message: { type: string, example: "Anda ditugaskan untuk Instalasi Router di Gedung B." }
+        category: { type: string, example: "TASK" }
+        isRead: { type: boolean, example: false }
+        relatedId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    Comment:
+      type: object
+      properties:
+        commentId: { type: string, format: uuid }
+        reportId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        content: { type: string, example: "Bos, routernya sudah nyala ya!" }
+        isReplyToReport: { type: boolean, example: true }
+        createdAt: { type: string, format: date-time }
+        deliveries: 
+          type: array
+          items:
+            type: object
+            properties:
+              userId: { type: string }
+              deliveredAt: { type: string, format: date-time }
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid, example: "usr-777-uuid" }
+        name: { type: string, example: "Hamka Ibnu" }
+        department: { type: string, nullable: true, example: "IT Network" }
+        completedTasks: { type: integer, example: 45 }
+        points: { type: integer, example: 450 }
+        avatar: { type: string, nullable: true, example: "https://c-track.com/avatar/hamka.jpg" }
+
+tags:
+  - name: 1. Auth & Profile
+    description: Registrasi, Login, dan Manajemen Profil
+  - name: 2. Admin - Users
+    description: Manajemen Pengguna (Khusus Admin)
+  - name: 3. Admin - Tasks & Assignments
+    description: Pembuatan Master Task dan Penugasan (Khusus Admin)
+  - name: 4. Employee - My Tasks
+    description: Eksekusi Tugas Karyawan di Lapangan
+  - name: 5. Locations (Tracking)
+    description: Pelacakan GPS Karyawan (Single & Bulk)
+  - name: 6. Reports
+    description: Laporan Hasil Kerja (Admin & Employee)
+  - name: 7. Tools - Geocoding & Maps
+    description: Pencarian Alamat dan Ekstraksi URL Google Maps
+  - name: 8. Tools - AI Copilot
+    description: Asisten AI C-Track
+  - name: 9. Chat
+    description: Komunikasi antar Pengguna
+  - name: 10. Notifications
+    description: Pusat Notifikasi Karyawan dan Admin
+  - name: 11. Leaderboard
+    description: Papan peringkat karyawan berdasarkan performa penyelesaian tugas
+  - name: 12. Achievement
+    description: Pencapaian dan performa kinerja karyawan
+  - name: 13. Admin - Roles & Hak Akses
+    description: Role dashboard (RBAC v2). Khusus Superadmin (roles.manage), kecuali /admin/roles/assignable.
+
+paths:
+  # ==========================================
+  # 1. AUTH & PROFILE
+  # ==========================================
+  /auth/login:
+    post:
+      tags: [1. Auth & Profile]
+      summary: Login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: "superadmin@trackingapp.com" }
+                password: { type: string, example: "password123" }
+      parameters:
+        - in: header
+          name: X-Client-Type
+          schema: { type: string, enum: [web, mobile], default: web }
+          description: Web hanya untuk role berplatform web; mobile hanya untuk employee.
+      responses:
+        200: { description: "OK - Returns JWT Token. user berisi role, roleDisplayName, roleLevel, roleColor, platform, permissions[]" }
+        403: { description: Platform tidak sesuai dengan role, atau akun tidak aktif }
+
+  /auth/me:
+    get:
+      tags: [1. Auth & Profile]
+      summary: Get Current User Profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+
+  /health:
+    get:
+      tags: [1. Auth & Profile]
+      summary: Health Check (Public)
+      description: Cek status server. Tidak membutuhkan autentikasi. Tersedia juga di `/api/health`.
+      responses:
+        200:
+          description: Server berjalan normal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+                  time: { type: string, format: date-time, example: "2026-07-10T11:24:59.000Z" }
+
+  # ==========================================
+  # 2. ADMIN - USERS
+  # ==========================================
+  /admin/users:
+    get:
+      tags: [2. Admin - Users]
+      summary: Get All Users
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+    post:
+      tags: [2. Admin - Users]
+      summary: Create New User
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+                role: { type: string, example: "employee" }
+      responses:
+        201: { description: Created }
+
+  # ==========================================
+  # 3. ADMIN - TASKS & ASSIGNMENTS
+  # ==========================================
+  /admin/tasks:
+    get:
+      tags: [3. Admin - Tasks & Assignments]
+      summary: Get All Master Tasks
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+    post:
+      tags: [3. Admin - Tasks & Assignments]
+      summary: Create Master Task
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ticketNumber: { type: string, example: "TSK-0007" }
+                title: { type: string, example: "Instalasi Router" }
+                description: { type: string, example: "Melakukan instalasi router mikrotik di ruang server utama" }
+                location: { type: string, example: "Gedung A" }
+                latitude: { type: number, example: -6.2 }
+                longitude: { type: number, example: 106.8 }
+                startTime: { type: string, example: "08:00:00" }
+                endTime: { type: string, example: "17:00:00" }
+                manualOverride: { type: boolean, example: false }
+      responses:
+        201: { description: Created }
+
+  /admin/assignments:
+    get:
+      tags: [3. Admin - Tasks & Assignments]
+      summary: Get All Assignments (Taken Tasks)
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+    post:
+      tags: [3. Admin - Tasks & Assignments]
+      summary: Assign Task (Bagikan Tugas ke Karyawan)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                taskId:
+                  type: string
+                  example: "MASUKKAN_ID_TASK"
+                userIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["MASUKKAN_ID_KARYAWAN"]
+                date:
+                  type: string
+                  format: date
+                  example: "2026-04-18"
+                startTime:
+                  type: string
+                  format: date-time
+                  example: "2026-04-18T08:00:00.000Z"
+                endTime:
+                  type: string
+                  format: date-time
+                  example: "2026-04-18T17:00:00.000Z"
+      responses:
+        201: 
+          description: Task assigned successfully
+
+  /admin/assignments/{takenTaskId}:
+    put:
+      tags: [3. Admin - Tasks & Assignments]
+      summary: Update Assignment (assignments.update)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: takenTaskId, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userIds: { type: array, items: { type: string } }
+                teamId: { type: string, nullable: true }
+                date: { type: string, format: date }
+                startTime: { type: string, format: date-time }
+      responses:
+        200: { description: Assignment updated }
+        409: { description: Penugasan yang sudah selesai tidak dapat diubah }
+
+  # ==========================================
+  # 4. EMPLOYEE - MY TASKS
+  # ==========================================
+  /my-tasks:
+    get:
+      tags: [4. Employee - My Tasks]
+      summary: List Tugas Saya (Mobile App)
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+
+  /my-tasks/{takenTaskId}/start:
+    patch:
+      tags: [4. Employee - My Tasks]
+      summary: Mulai Mengerjakan Tugas (Start Tracking)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: takenTaskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Task Started }
+        
+  /my-tasks/{takenTaskId}/complete:
+    patch:
+      tags: [4. Employee - My Tasks]
+      summary: Menyelesaikan Tugas (Complete Task)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: takenTaskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Tugas berhasil diselesaikan dan notif terkirim ke Admin.
+
+  # ==========================================
+  # 5. LOCATIONS (TRACKING)
+  # ==========================================
+  /locations:
+    post:
+      tags: [5. Locations (Tracking)]
+      summary: Submit Single GPS Coordinate
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [takenTaskId, latitude, longitude]
+              properties:
+                takenTaskId: { type: string, example: "Masukkan-ID-Tugas-Disini" }
+                latitude: { type: number, example: -6.1751 }
+                longitude: { type: number, example: 106.8272 }
+                address: { type: string }
+      responses:
+        201: { description: Coordinate Logged }
+
+  /locations/bulk:
+    post:
+      tags: [5. Locations (Tracking)]
+      summary: Submit Bulk GPS Coordinates (Offline Sync)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locations: 
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      takenTaskId: { type: string }
+                      latitude: { type: number }
+                      longitude: { type: number }
+      responses:
+        201: { description: Bulk Logged }
+
+  /admin/locations/all:
+    get:
+      tags: [5. Locations (Tracking)]
+      summary: Lihat Semua Riwayat Lokasi (Admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+
+  # ==========================================
+  # 6. REPORTS
+  # ==========================================
+  /reports:
+    post:
+      tags: [6. Reports]
+      summary: Submit Laporan Kerja Karyawan
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                takenTaskId: { type: string }
+                report: { type: string, example: "Pekerjaan Selesai" }
+                image: { type: string, description: "Base64 Image" }
+      responses:
+        201: { description: Report Submitted }
+
+  /admin/reports:
+    get:
+      tags: [6. Reports]
+      summary: Get All Reports (Admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+
+  # ==========================================
+  # 7. TOOLS - GEOCODING & MAPS
+  # ==========================================
+  /geocoding/search:
+    get:
+      tags: [7. Tools - Geocoding & Maps]
+      summary: Cari Alamat (Nominatim Proxy)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, example: "Monas, Jakarta" }
+      responses:
+        200: { description: OK }
+
+  /geocoding/extract-from-maps:
+    post:
+      tags: [7. Tools - Geocoding & Maps]
+      summary: Ekstrak Koordinat dari Link Google Maps
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mapsLink: { type: string, example: "https://maps.app.goo.gl/..." }
+      responses:
+        200: { description: Koordinat Ditemukan }
+
+  # ==========================================
+  # 8. TOOLS - AI COPILOT
+  # ==========================================
+  /ai/health:
+    get:
+      tags: [8. Tools - AI Copilot]
+      summary: Cek Status Layanan AI
+      responses:
+        200: { description: AI service running }
+
+  /ai/agent:
+    post:
+      tags: [8. Tools - AI Copilot]
+      summary: Tanya AI Assistant
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question: { type: string, example: "Tampilkan performa karyawan hari ini" }
+      responses:
+        200: { description: Answer Generated }
+
+  # ==========================================
+  # 9. CHAT & COMMENTS
+  # ==========================================
+  /chat/{takenTaskId}:
+    get:
+      tags: [9. Chat]
+      summary: Get Chat History by Task
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: takenTaskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: OK }
+
+  /comments:
+    post:
+      tags: [9. Chat]
+      summary: Kirim Pesan / Komentar Baru
+      description: Mengirim pesan ke dalam tiket laporan. Otomatis men-trigger notifikasi Socket.io ke Admin/Employee terkait dan mencatat `CommentDelivered`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reportId, content]
+              properties:
+                reportId: { type: string, format: uuid, example: "550e8400-e29b-41d4-a716-446655440000" }
+                content: { type: string, example: "Test pesan dari lapangan! 🚀" }
+                parentId: { type: string, format: uuid, nullable: true, example: null }
+                isReplyToReport: { type: boolean, example: true }
+      responses:
+        201:
+          description: Pesan sukses terkirim
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Komentar berhasil ditambahkan" }
+                  data:
+                    $ref: '#/components/schemas/Comment'
+        400:
+          description: Validasi Gagal (Data kurang lengkap)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Unauthorized (Token tidak valid/kadaluarsa)
+
+  # ==========================================
+  # 10. NOTIFICATIONS
+  # ==========================================
+  /notifications:
+    get:
+      tags: [10. Notifications]
+      summary: Dapatkan Semua Notifikasi Saya
+      description: Mengambil list notifikasi milik user yang sedang login, diurutkan dari yang paling baru.
+      security: [{ bearerAuth: [] }]
+      responses:
+        200:
+          description: Berhasil mengambil data notifikasi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+
+  /notifications/unread-count:
+    get:
+      tags: [10. Notifications]
+      summary: Get Unread Notifications Count
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: OK }
+
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [10. Notifications]
+      summary: Tandai Notifikasi Sudah Dibaca
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          description: ID unik dari notifikasi
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Status notifikasi berhasil diubah menjadi isRead = true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Notifikasi telah ditandai dibaca" }
+        404:
+          description: Notifikasi tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # 11. LEADERBOARD & ACHIEVEMENT
+  # ==========================================
+  /achievement/leaderboard:
+    get:
+      tags: [11. Leaderboard]
+      summary: Dapatkan Papan Peringkat Karyawan (Top Performers)
+      description: Mengambil daftar karyawan dengan penyelesaian tugas terbanyak (Status = Completed). Dilengkapi dengan filter periode waktu.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: period
+          in: query
+          required: false
+          description: Filter rentang waktu peringkat (default bulanan)
+          schema:
+            type: string
+            enum: [weekly, monthly, all_time]
+            default: monthly
+      responses:
+        200:
+          description: Berhasil mengambil data leaderboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaderboardEntry'
+        401:
+          description: Unauthorized (Token tidak valid/kadaluarsa)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /achievement/me:
+    get:
+      tags: [12. Achievement]
+      summary: Dapatkan Pencapaian Saya (My Achievements)
+      description: Mengambil data ringkasan pencapaian (achievements) dari user yang sedang login. Data ini dikalkulasi secara dinamis berdasarkan posisi dan statistik user di dalam sistem leaderboard.
+      security: [{ bearerAuth: [] }]
+      responses:
+        200:
+          description: Berhasil mengambil data pencapaian user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: 
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    nullable: true
+                    description: Akan bernilai null jika user belum masuk ke dalam kalkulasi leaderboard
+                    properties:
+                      rank:
+                        type: integer
+                        description: Peringkat user saat ini di leaderboard
+                        example: 1
+                      score:
+                        type: number
+                        format: float
+                        description: Skor perilaku/kinerja user (behaviorScore)
+                        example: 95.5
+                      name:
+                        type: string
+                        description: Nama user
+                        example: "Samka"
+                      totalTasks:
+                        type: integer
+                        description: Total keseluruhan tugas yang dimiliki user
+                        example: 10
+                      completedTasks:
+                        type: integer
+                        description: Jumlah tugas yang sudah selesai
+                        example: 8
+                      totalReports:
+                        type: integer
+                        description: Total laporan yang dibuat oleh user
+                        example: 15
+                      totalDistanceKm:
+                        type: number
+                        format: float
+                        description: Total jarak tempuh kumulatif dalam kilometer
+                        example: 42.5
+                      reportRate:
+                        type: number
+                        format: float
+                        description: Persentase tingkat pelaporan
+                        example: 0.8
+                      activityRate:
+                        type: number
+                        format: float
+                        description: Persentase tingkat aktivitas
+                        example: 0.9
+                      completionRate:
+                        type: number
+                        format: float
+                        description: Persentase rasio penyelesaian tugas
+                        example: 0.85
+                      pendingTasks:
+                        type: integer
+                        description: Jumlah tugas yang berstatus pending
+                        example: 1
+                      inProgressTasks:
+                        type: integer
+                        description: Jumlah tugas yang sedang dikerjakan
+                        example: 1
+                      avgDistanceKm:
+                        type: number
+                        format: float
+                        description: Rata-rata jarak tempuh per tugas dalam kilometer
+                        example: 5.2
+                      avgDurationMs:
+                        type: integer
+                        description: Rata-rata durasi pengerjaan tugas dalam satuan milidetik
+                        example: 3600000
+        401:
+          description: Unauthorized (Token tidak valid/kadaluarsa atau belum login)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        500:
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # 13. ADMIN - ROLES & HAK AKSES (RBAC v2)
+  # ==========================================
+  /admin/permissions:
+    get:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Katalog hak akses, dikelompokkan per modul
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: "{ modules: [{ module, label, permissions: [{ key, label, description, isBase?, requires?, locked? }] }] }" }
+
+  /admin/roles:
+    get:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Daftar role
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: includeMobile, schema: { type: boolean }, description: Sertakan role mobile (employee) }
+      responses:
+        200: { description: "{ data: Role[] }" }
+    post:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Buat role baru (platform web)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, displayName]
+              properties:
+                name: { type: string, example: "supervisor_lapangan", description: "^[a-z][a-z0-9_]{2,49}$" }
+                displayName: { type: string, example: "Supervisor Lapangan" }
+                description: { type: string }
+                level: { type: integer, example: 40, description: "1-99, harus di bawah level Anda" }
+                color: { type: string, example: "#16a34a" }
+                showTaskBadge: { type: boolean, description: "Tampilkan badge Dibuat oleh {Role} pada task yang dibuat role ini" }
+                permissions: { type: array, items: { type: string }, example: ["dashboard.view", "tasks.create"] }
+                copyFromRoleId: { type: string }
+      responses:
+        201: { description: "{ data: Role, meta: { autoAdded: string[] } }" }
+        409: { description: Kode role sudah dipakai }
+        422: { description: "Validasi gagal (nama, level, permission tidak dikenal / roles.manage)" }
+
+  /admin/roles/assignable:
+    get:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Role yang boleh di-assign user saat ini (users.create / users.update)
+      security: [{ bearerAuth: [] }]
+      responses:
+        200: { description: "{ data: [{ id, name, displayName, platform, color, level }] }" }
+
+  /admin/roles/audit:
+    get:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Riwayat perubahan role & hak akses
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: roleId, schema: { type: string } }
+      responses:
+        200: { description: "{ data: AuditLog[] }" }
+
+  /admin/roles/{id}:
+    get:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Detail role + anggota (maks. 50)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: "{ data: Role & { users } }" }
+    put:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Ubah detail role (displayName, description, color, showTaskBadge, level, name)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: "{ data: Role }" }
+        403: { description: Field tidak dapat diubah untuk role sistem }
+    delete:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Hapus role custom tanpa anggota
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        204: { description: Deleted }
+        403: { description: Role sistem }
+        409: { description: "Role masih dipakai user ({ message, userCount })" }
+
+  /admin/roles/{id}/permissions:
+    put:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Ganti seluruh hak akses role
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissions: { type: array, items: { type: string } }
+      responses:
+        200: { description: "{ data: Role, meta: { added, removed, autoAdded } }" }
+        403: { description: Superadmin / Employee tidak dapat diubah }
+
+  /admin/roles/{id}/reassign:
+    post:
+      tags: [13. Admin - Roles & Hak Akses]
+      summary: Pindahkan semua anggota role ke role lain
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toRoleId: { type: string }
+      responses:
+        200: { description: "{ moved: number }" }

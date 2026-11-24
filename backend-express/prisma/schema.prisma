@@ -1,0 +1,385 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.Char(36)
+  name            String         @db.VarChar(255)
+  email           String         @unique(map: "users_email_unique") @db.VarChar(255)
+  phoneNumber     String?        @map("phone_number") @db.VarChar(255)
+  department      String?        @db.VarChar(255)
+  position        String?        @db.VarChar(255)
+  address         String?        @db.Text
+  avatar          String?        @db.LongText
+  pushToken       String?        @map("push_token") @db.VarChar(255)
+  status          users_status   @default(active)
+  lastLoginAt     DateTime?      @map("last_login_at") @db.Timestamp(0)
+  emailVerifiedAt DateTime?      @map("email_verified_at") @db.Timestamp(0)
+  password        String         @db.VarChar(255)
+  rememberToken   String?        @map("remember_token") @db.VarChar(100)
+  createdAt       DateTime?      @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime?      @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  locations     Location[]
+  modelHasRoles ModelHasRole[]
+  reports       Report[]
+  comments      Comment[]
+  notifications Notification[]
+  commentReads  CommentRead[]
+  commentDeliveries CommentDelivered[]
+
+  // Team relations (named to avoid ambiguous relations)
+  teamId      String?  @map("team_id") @db.Char(36)
+  team        Team?    @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  ledTeams    Team[]   @relation("TeamLeader")
+
+  // Task yang dibuat user ini (untuk badge "Dibuat oleh {Role}")
+  createdTasks Task[] @relation("TaskCreator")
+
+  @@index([teamId], map: "users_team_id_foreign")
+  @@map("users")
+}
+
+model Task {
+  taskId         String      @id @default(uuid()) @map("task_id") @db.Char(36)
+  ticketNumber   String?     @unique(map: "tasks_ticket_number_unique") @map("ticket_number") @db.VarChar(255)
+  title          String      @db.VarChar(255)
+  description    String      @db.Text
+  location       String      @db.VarChar(255)
+  latitude       Decimal?    @db.Decimal(10, 8)
+  longitude      Decimal?    @db.Decimal(11, 8)
+  startTime      DateTime    @default(dbgenerated("('08:00:00')")) @map("start_time") @db.Time(0)
+  endTime        DateTime    @default(dbgenerated("('17:00:00')")) @map("end_time") @db.Time(0)
+  status         String      @default("active") @db.VarChar(255)
+  manualOverride Boolean     @default(false) @map("manual_override")
+  createdAt      DateTime?   @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?   @updatedAt @map("updated_at") @db.Timestamp(0)
+  takenTasks     TakenTask[]
+
+  // Pembuat task + snapshot nama role saat task dibuat (badge "Dibuat oleh {Role}")
+  createdById       String? @map("created_by_id") @db.Char(36)
+  createdByRoleName String? @map("created_by_role_name") @db.VarChar(255)
+  createdBy         User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "tasks_created_by_id_foreign")
+
+  @@index([createdById], map: "tasks_created_by_id_foreign")
+  @@map("tasks")
+}
+
+model TakenTask {
+  takenTaskId  String        @id @default(uuid()) @map("taken_task_id") @db.Char(36)
+  ticketNumber String?       @unique(map: "taken_tasks_ticket_number_unique") @map("ticket_number") @db.VarChar(255)
+  taskId       String        @map("task_id") @db.Char(36)
+  userIds      String        @map("user_ids") @db.LongText
+  userStatuses String        @map("user_statuses") @db.LongText
+  startTime    DateTime?     @map("start_time") @db.Timestamp(0)
+  endTime      DateTime?     @map("end_time") @db.Timestamp(0)
+  date         DateTime?     @db.Date
+  status       String        @default("in_progress") @db.VarChar(255)
+  createdAt    DateTime?     @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime?     @updatedAt @map("updated_at") @db.Timestamp(0)
+  locations    Location[]
+  reports      Report[]
+  task         Task          @relation(fields: [taskId], references: [taskId], onDelete: Cascade, onUpdate: Restrict, map: "taken_tasks_task_id_foreign")
+  ChatMessage  ChatMessage[]
+
+  // Team relation (named to avoid ambiguous relations)
+  teamId      String?  @map("team_id") @db.Char(36)
+  team        Team?    @relation("TeamTakenTasks", fields: [teamId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([taskId], map: "taken_tasks_task_id_foreign")
+  @@index([teamId], map: "taken_tasks_team_id_foreign")
+  @@map("taken_tasks")
+}
+
+// 🔥 TABEL BARU: TIM (grouping terstruktur karyawan, terpisah dari User.department)
+model Team {
+  id          String       @id @default(uuid()) @db.Char(36)
+  name        String       @db.VarChar(255)
+  description String?      @db.Text
+  leaderId    String?      @map("leader_id") @db.Char(36)
+  status      String       @default("active") @db.VarChar(20)
+  createdAt   DateTime?    @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime?    @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  leader     User?      @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  users      User[]     @relation("TeamMembers")
+  takenTasks TakenTask[] @relation("TeamTakenTasks")
+
+  @@index([leaderId], map: "teams_leader_id_foreign")
+  @@map("teams")
+}
+
+model Location {
+  locationId     String                    @id @default(uuid()) @map("location_id") @db.Char(36)
+  takenTaskId    String                    @map("taken_task_id") @db.Char(36)
+  userId         String                    @map("user_id") @db.Char(36)
+  latitude       Decimal                   @db.Decimal(10, 8)
+  longitude      Decimal                   @db.Decimal(11, 8)
+  accuracy       Decimal?                  @db.Decimal(8, 2)
+  address        String?                   @db.VarChar(255)
+  trackingStatus locations_tracking_status @default(auto) @map("tracking_status")
+  recordedAt     DateTime                  @default(now()) @map("recorded_at") @db.Timestamp(0)
+  createdAt      DateTime?                 @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?                 @updatedAt @map("updated_at") @db.Timestamp(0)
+  takenTask      TakenTask                 @relation(fields: [takenTaskId], references: [takenTaskId], onDelete: Cascade, onUpdate: Restrict, map: "locations_taken_task_id_foreign")
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "locations_user_id_foreign")
+
+  @@index([recordedAt], map: "locations_recorded_at_index")
+  @@index([takenTaskId, userId], map: "locations_taken_task_id_user_id_index")
+  @@index([userId], map: "locations_user_id_foreign")
+  @@map("locations")
+}
+
+model Report {
+  reportId     String    @id @default(uuid()) @map("report_id") @db.Char(36)
+  ticketNumber String?   @unique(map: "reports_ticket_number_unique") @map("ticket_number") @db.VarChar(255)
+  userId       String    @map("user_id") @db.Char(36)
+  takenTaskId  String    @map("taken_task_id") @db.Char(36)
+  report       String    @db.Text
+  image        String?   @db.LongText
+  status       String    @default("OPEN") @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  takenTask    TakenTask @relation(fields: [takenTaskId], references: [takenTaskId], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  comments      Comment[]
+  ReportComment ReportComment[]
+  @@map("reports")
+}
+model Comment {
+  commentId       String    @id @default(uuid()) @map("comment_id") @db.Char(36)
+  reportId        String    @map("report_id") @db.Char(36)
+  userId          String    @map("user_id") @db.Char(36)
+  parentId        String?   @map("parent_id") @db.Char(36)
+  content         String    @db.Text
+  image           String?   @db.LongText
+  deleted         Boolean   @default(false)
+  isReplyToReport Boolean   @default(false) @map("is_reply_to_report")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  report Report @relation(fields: [reportId], references: [reportId], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reads    CommentRead[]
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [commentId])
+  replies Comment[] @relation("CommentReplies")
+  deliveries CommentDelivered[]
+
+  @@index([reportId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model CommentRead {
+  id        String   @id @default(uuid()) @db.Char(36)
+  commentId String   @map("comment_id") @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  readAt    DateTime @default(now()) @map("read_at") @db.Timestamp(0)
+ 
+  comment   Comment  @relation(fields: [commentId], references: [commentId], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+  @@map("comment_reads")
+}
+
+model Permission {
+  id                  BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  name                String               @db.VarChar(255)
+  guardName           String               @map("guard_name") @db.VarChar(255)
+  module              String?              @db.VarChar(50)
+  label               String?              @db.VarChar(100)
+  description         String?              @db.Text
+  sortOrder           Int                  @default(0) @map("sort_order")
+  createdAt           DateTime?            @map("created_at") @db.Timestamp(0)
+  updatedAt           DateTime?            @updatedAt @map("updated_at") @db.Timestamp(0)
+  modelHasPermissions ModelHasPermission[]
+  roleHasPermissions  RoleHasPermission[]
+
+  @@unique([name, guardName], map: "permissions_name_guard_name_unique")
+  @@map("permissions")
+}
+
+model Role {
+  id                 BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  name               String              @db.VarChar(255)
+  guardName          String              @map("guard_name") @db.VarChar(255)
+  displayName        String?             @map("display_name") @db.VarChar(100)
+  description        String?             @db.Text
+  level              Int                 @default(10)
+  platform           role_platform       @default(web)
+  isSystem           Boolean             @default(false) @map("is_system")
+  color              String?             @db.VarChar(20)
+  showTaskBadge      Boolean             @default(false) @map("show_task_badge")
+  createdAt          DateTime?           @map("created_at") @db.Timestamp(0)
+  updatedAt          DateTime?           @updatedAt @map("updated_at") @db.Timestamp(0)
+  modelHasRoles      ModelHasRole[]
+  roleHasPermissions RoleHasPermission[]
+
+  @@unique([name, guardName], map: "roles_name_guard_name_unique")
+  @@map("roles")
+}
+
+model RoleHasPermission {
+  permissionId BigInt     @map("permission_id") @db.UnsignedBigInt
+  roleId       BigInt     @map("role_id") @db.UnsignedBigInt
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "role_has_permissions_permission_id_foreign")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "role_has_permissions_role_id_foreign")
+
+  @@id([permissionId, roleId])
+  @@index([roleId], map: "role_has_permissions_role_id_foreign")
+  @@map("role_has_permissions")
+}
+
+model ModelHasRole {
+  roleId    BigInt @map("role_id") @db.UnsignedBigInt
+  modelType String @map("model_type") @db.VarChar(255)
+  modelId   String @map("model_id") @db.Char(36)
+  user      User   @relation(fields: [modelId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  role      Role   @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "model_has_roles_role_id_foreign")
+
+  @@id([roleId, modelId, modelType])
+  @@index([modelId, modelType], map: "model_has_roles_model_id_model_type_index")
+  @@map("model_has_roles")
+}
+
+model ModelHasPermission {
+  permissionId BigInt     @map("permission_id") @db.UnsignedBigInt
+  modelType    String     @map("model_type") @db.VarChar(255)
+  modelId      String     @map("model_id") @db.Char(36)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "model_has_permissions_permission_id_foreign")
+
+  @@id([permissionId, modelId, modelType])
+  @@index([modelId, modelType], map: "model_has_permissions_model_id_model_type_index")
+  @@map("model_has_permissions")
+}
+
+model PasswordResetToken {
+  email     String    @id @db.VarChar(255)
+  token     String    @db.VarChar(255)
+  createdAt DateTime? @map("created_at") @db.Timestamp(0)
+
+  @@map("password_reset_tokens")
+}
+
+model PersonalAccessToken {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  tokenableType String    @map("tokenable_type") @db.VarChar(255)
+  tokenableId   String    @map("tokenable_id") @db.Char(36)
+  name          String    @db.VarChar(255)
+  token         String    @unique(map: "personal_access_tokens_token_unique") @db.VarChar(64)
+  abilities     String?   @db.Text
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamp(0)
+  expiresAt     DateTime? @map("expires_at") @db.Timestamp(0)
+  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([tokenableType, tokenableId], map: "personal_access_tokens_tokenable_type_tokenable_id_index")
+  @@map("personal_access_tokens")
+}
+
+model failed_jobs {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  uuid       String   @unique(map: "failed_jobs_uuid_unique") @db.VarChar(255)
+  connection String   @db.Text
+  queue      String   @db.Text
+  payload    String   @db.LongText
+  exception  String   @db.LongText
+  failed_at  DateTime @default(now()) @db.Timestamp(0)
+}
+
+model migrations {
+  id        Int    @id @default(autoincrement()) @db.UnsignedInt
+  migration String @db.VarChar(255)
+  batch     Int
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  takenTaskId String
+  senderId    String
+  senderRole  String 
+  message     String
+  createdAt   DateTime @default(now())
+
+  takenTask TakenTask @relation(fields: [takenTaskId], references: [takenTaskId])
+}
+
+model ReportComment {
+  commentId String   @id
+  reportId  String
+  userId    String
+  message   String
+  createdAt DateTime @default(now())
+  reports   Report   @relation(fields: [reportId], references: [reportId])
+
+  @@index([reportId], map: "ReportComment_reportId_fkey")
+}
+
+model CommentDelivered {
+  commentId   String
+  userId      String
+  deliveredAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [commentId], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+}
+
+// 🔥 TABEL BARU UNTUK FITUR NOTIFIKASI
+model Notification {
+  id          String   @id @default(uuid()) @map("notification_id") @db.Char(36)
+  userId      String   @map("user_id") @db.Char(36)
+  title       String   @db.VarChar(255)
+  message     String   @db.Text
+  category    String   @db.VarChar(50) // Isi: "TASK", "CHAT", "ACHIEVEMENT"
+  isRead      Boolean  @default(false) @map("is_read")
+  relatedId   String?  @map("related_id") @db.Char(36) // ID Tugas atau Chat yang terkait
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+// Log perubahan role & hak akses (tab "Riwayat" di Role dashboard)
+model RbacAuditLog {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  actorId    String?   @map("actor_id") @db.Char(36)
+  action     String    @db.VarChar(50)
+  targetType String    @map("target_type") @db.VarChar(50)
+  targetId   String    @map("target_id") @db.VarChar(64)
+  before     Json?
+  after      Json?
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([targetType, targetId], map: "rbac_audit_logs_target")
+  @@map("rbac_audit_logs")
+}
+
+enum role_platform {
+  web
+  mobile
+}
+
+enum locations_tracking_status {
+  auto
+  manual
+}
+
+enum users_status {
+  active
+  inactive
+}
